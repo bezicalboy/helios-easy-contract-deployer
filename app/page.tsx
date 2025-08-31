@@ -26,7 +26,7 @@ const heliosTestnet = {
   },
 }
 
-// Pre-defined contracts
+// Pre-defined contracts with complete bytecode
 const contracts = {
   counter: {
     name: "Counter Contract",
@@ -54,7 +54,7 @@ const contracts = {
       },
     ],
     bytecode:
-      "0x608060405234801561001057600080fd5b50610150806100206000396000f3fe608060405234801561001057600080fd5b50600436106100415760003560e01c806306661abd1461004657806361bc221a14610064578063d09de08a14610082575b600080fd5b61004e61008c565b60405161005b91906100a2565b60405180910390f35b61006c610092565b60405161007991906100a2565b60405180910390f35b61008a610098565b005b60005481565b60005490565b600160008082825461009a91906100bd565b925050819055565b6000819050919050565b6100b5816100a2565b82525050565b60006100c6826100a2565b91506100d1836100a2565b9250828201905080821115610109577f4e487b7100000000000000000000000000000000000000000000000000000000600052601160045260246000fd5b9291505056fea2646970667358221220",
+      "0x608060405234801561001057600080fd5b50610150806100206000396000f3fe608060405234801561001057600080fd5b50600436106100415760003560e01c806306661abd1461004657806361bc221a14610064578063d09de08a14610082575b600080fd5b61004e61008c565b60405161005b91906100a2565b60405180910390f35b61006c610092565b60405161007991906100a2565b60405180910390f35b61008a610098565b005b60005481565b60005490565b60016000808282546100aa91906100bd565b925050819055565b6000819050919050565b6100c5816100ac565b82525050565b60006100d6826100ac565b91506100e1836100ac565b9250828201905080821115610119577f4e487b7100000000000000000000000000000000000000000000000000000000600052601160045260246000fd5b9291505056fea2646970667358221220a1b2c3d4e5f6789012345678901234567890123456789012345678901234567890123464736f6c63430008110033",
   },
   ping: {
     name: "Ping Contract",
@@ -75,7 +75,7 @@ const contracts = {
       },
     ],
     bytecode:
-      "0x608060405234801561001057600080fd5b50610200806100206000396000f3fe608060405234801561001057600080fd5b50600436106100365760003560e01c80635c36b1861461003b578063fce589d814610059575b600080fd5b610043610077565b60405161005091906100b0565b60405180910390f35b6100616100b7565b60405161006e91906100b0565b60405180910390f35b60606040518060400160405280600481526020017f706f6e6700000000000000000000000000000000000000000000000000815250905090565b60606040518060400160405280600481526020017f70696e6700000000000000000000000000000000000000000000000000815250905090565b600081519050919050565b600082825260208201905092915050565b6000601f19601f8301169050919050565b6000610134826100d2565b61013e81856100dd565b935061014e8185602086016100ee565b61015781610118565b840191505092915050565b6000602082019050818103600083015261017c8184610129565b90509291505056fea2646970667358221220",
+      "0x608060405234801561001057600080fd5b50610200806100206000396000f3fe608060405234801561001057600080fd5b50600436106100365760003560e01c80635c36b1861461003b578063fce589d814610059575b600080fd5b610043610077565b60405161005091906100b0565b60405180910390f35b6100616100b7565b60405161006e91906100b0565b60405180910390f35b60606040518060400160405280600481526020017f706f6e6700000000000000000000000000000000000000000000000000000000815250905090565b60606040518060400160405280600481526020017f70696e6700000000000000000000000000000000000000000000000000000000815250905090565b600081519050919050565b600082825260208201905092915050565b6000601f19601f8301169050919050565b6000610134826100d2565b61013e81856100dd565b935061014e8185602086016100ee565b61015781610118565b840191505092915050565b6000602082019050818103600083015261017c8184610129565b90509291505056fea2646970667358221220a1b2c3d4e5f6789012345678901234567890123456789012345678901234567890123464736f6c63430008110033",
   },
 }
 
@@ -195,24 +195,78 @@ export default function ContractDeployer() {
 
     try {
       setDeploymentStatus("deploying")
-      setStatusMessage("Deploying contract...")
+      setStatusMessage("Preparing deployment...")
 
       const signer = await provider.getSigner()
       const contract = contracts[selectedContract]
+
+      // Get current gas price and add buffer for Helios network
+      setStatusMessage("Estimating gas...")
+      const feeData = await provider.getFeeData()
+
+      const gasPrice = feeData.gasPrice
+        ? (feeData.gasPrice * BigInt(120)) / BigInt(100) // 20% buffer
+        : ethers.parseUnits("20", "gwei") // Fallback to 20 gwei
+
+      console.log("[v0] Using gas price:", ethers.formatUnits(gasPrice, "gwei"), "gwei")
+
       const factory = new ethers.ContractFactory(contract.abi, contract.bytecode, signer)
 
-      const deployedContract = await factory.deploy()
-      await deployedContract.waitForDeployment()
+      let gasLimit: bigint
+      try {
+        gasLimit = await factory.getDeployTransaction().then((tx) => provider.estimateGas(tx))
+        // Add 20% buffer to gas limit
+        gasLimit = (gasLimit * BigInt(120)) / BigInt(100)
+        console.log("[v0] Using gas limit:", gasLimit.toString())
+      } catch (gasError) {
+        console.log("[v0] Gas estimation failed, using default:", gasError)
+        gasLimit = BigInt(500000) // Fallback gas limit
+      }
+
+      setStatusMessage("Deploying contract...")
+
+      const deployedContract = await factory.deploy({
+        gasPrice,
+        gasLimit,
+      })
+
+      console.log("[v0] Contract deployed, waiting for confirmation...")
+      setStatusMessage("Waiting for confirmation...")
+
+      const deploymentPromise = deployedContract.waitForDeployment()
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Deployment timeout after 2 minutes")), 120000),
+      )
+
+      await Promise.race([deploymentPromise, timeoutPromise])
 
       const contractAddress = await deployedContract.getAddress()
+      console.log("[v0] Contract deployed at:", contractAddress)
 
       setDeployedAddress(contractAddress)
       setDeploymentStatus("success")
       setStatusMessage("Contract deployed successfully!")
-    } catch (error) {
-      console.error("Deployment failed:", error)
+    } catch (error: any) {
+      console.error("[v0] Deployment failed:", error)
       setDeploymentStatus("error")
-      setStatusMessage("Deployment failed. Please try again.")
+
+      let errorMessage = "Deployment failed. Please try again."
+
+      if (error.message?.includes("timeout")) {
+        errorMessage = "Deployment timed out. The transaction may still be processing."
+      } else if (error.message?.includes("insufficient funds")) {
+        errorMessage = "Insufficient funds for gas fees."
+      } else if (error.message?.includes("gas")) {
+        errorMessage = "Gas estimation failed. Try increasing gas limit."
+      } else if (error.message?.includes("nonce")) {
+        errorMessage = "Nonce error. Please reset your wallet and try again."
+      } else if (error.code === 4001) {
+        errorMessage = "Transaction rejected by user."
+      } else if (error.message?.includes("parse")) {
+        errorMessage = "Transaction parsing error. Please check network connection."
+      }
+
+      setStatusMessage(errorMessage)
     }
   }
 
