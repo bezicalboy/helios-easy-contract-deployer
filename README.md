@@ -69,11 +69,6 @@ This is a Next.js application built with:
 - ethers.js
 - shadcn/ui components
 
-\`\`\`bash
-npm install
-npm run dev
-\`\`\`
-
 ## License
 
 MIT License - feel free to use and modify as needed.
