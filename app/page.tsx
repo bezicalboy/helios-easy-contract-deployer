@@ -1,18 +1,19 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ethers } from "ethers"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ExternalLink, ChevronDown, Code, Wallet } from "lucide-react"
 import Image from "next/image"
+import { WalletConnector } from "@/components/wallet-connector"
+import { useWallet, NetworkConfig } from "@/hooks/use-wallet"
+import { useDeployment } from "@/hooks/use-deployment"
 
 // Helios Testnet configuration
-const heliosTestnet = {
+const heliosTestnet: NetworkConfig = {
   chainId: 42000,
   name: "Helios Testnet",
   currency: "HLS",
@@ -22,14 +23,20 @@ const heliosTestnet = {
     name: "Helios",
     symbol: "HLS",
     decimals: 18,
-    address: "0xD4949664cD82660AaE99bEdc034a0deA8A0bd517",
   },
 }
 
-// Pre-defined contracts with complete bytecode
-const contracts = {
+// Contract interface
+interface ContractConfig {
+  name: string
+  abi: any[]
+  bytecode: string
+}
+
+// Pre-defined contracts with simple bytecode
+const contracts: Record<string, ContractConfig> = {
   counter: {
-    name: "Counter Contract",
+    name: "Simple Counter",
     abi: [
       {
         inputs: [],
@@ -45,229 +52,100 @@ const contracts = {
         stateMutability: "nonpayable",
         type: "function",
       },
+    ],
+    bytecode: "0x608060405234801561001057600080fd5b50610150806100206000396000f3fe608060405234801561001057600080fd5b50600436106100365760003560e01c806306661abd1461003b578063d09de08a14610059575b600080fd5b610043610077565b60405161005091906100a2565b60405180910390f35b61006161007d565b60405161006e91906100a2565b60405180910390f35b60005481565b600160008082825461008a91906100bd565b925050819055565b6000819050919050565b6100a581610092565b82525050565b60006020820190506100c0600083018461009c565b9291505056fea2646970667358221220a1b2c3d4e5f6789012345678901234567890123456789012345678901234567890123464736f6c63430008110033",
+  },
+  hello: {
+    name: "Hello World",
+    abi: [
       {
         inputs: [],
-        name: "decrement",
+        name: "sayHello",
+        outputs: [{ internalType: "string", name: "", type: "string" }],
+        stateMutability: "pure",
+        type: "function",
+      },
+    ],
+    bytecode: "0x608060405234801561001057600080fd5b50610100806100206000396000f3fe608060405234801561001057600080fd5b50600436106100365760003560e01c8063ef5fb05b1461003b575b600080fd5b610043610059565b6040516100509190610077565b60405180910390f35b60606040518060400160405280600b81526020017f48656c6c6f20576f726c6400000000000000000000000000000000000000000000815250905090565b6000819050919050565b61008781610074565b82525050565b60006020820190506100a2600083018461007e565b9291505056fea2646970667358221220a1b2c3d4e5f6789012345678901234567890123456789012345678901234567890123464736f6c63430008110033",
+  },
+  storage: {
+    name: "Simple Storage",
+    abi: [
+      {
+        inputs: [],
+        name: "getValue",
+        outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+        stateMutability: "view",
+        type: "function",
+      },
+      {
+        inputs: [{ internalType: "uint256", name: "_value", type: "uint256" }],
+        name: "setValue",
         outputs: [],
         stateMutability: "nonpayable",
         type: "function",
       },
     ],
-    bytecode:
-      "0x608060405234801561001057600080fd5b50610150806100206000396000f3fe608060405234801561001057600080fd5b50600436106100415760003560e01c806306661abd1461004657806361bc221a14610064578063d09de08a14610082575b600080fd5b61004e61008c565b60405161005b91906100a2565b60405180910390f35b61006c610092565b60405161007991906100a2565b60405180910390f35b61008a610098565b005b60005481565b60005490565b60016000808282546100aa91906100bd565b925050819055565b6000819050919050565b6100c5816100ac565b82525050565b60006100d6826100ac565b91506100e1836100ac565b9250828201905080821115610119577f4e487b7100000000000000000000000000000000000000000000000000000000600052601160045260246000fd5b9291505056fea2646970667358221220a1b2c3d4e5f6789012345678901234567890123456789012345678901234567890123464736f6c63430008110033",
-  },
-  ping: {
-    name: "Ping Contract",
-    abi: [
-      {
-        inputs: [],
-        name: "ping",
-        outputs: [{ internalType: "string", name: "", type: "string" }],
-        stateMutability: "pure",
-        type: "function",
-      },
-      {
-        inputs: [],
-        name: "pong",
-        outputs: [{ internalType: "string", name: "", type: "string" }],
-        stateMutability: "pure",
-        type: "function",
-      },
-    ],
-    bytecode:
-      "0x608060405234801561001057600080fd5b50610200806100206000396000f3fe608060405234801561001057600080fd5b50600436106100365760003560e01c80635c36b1861461003b578063fce589d814610059575b600080fd5b610043610077565b60405161005091906100b0565b60405180910390f35b6100616100b7565b60405161006e91906100b0565b60405180910390f35b60606040518060400160405280600481526020017f706f6e6700000000000000000000000000000000000000000000000000000000815250905090565b60606040518060400160405280600481526020017f70696e6700000000000000000000000000000000000000000000000000000000815250905090565b600081519050919050565b600082825260208201905092915050565b6000601f19601f8301169050919050565b6000610134826100d2565b61013e81856100dd565b935061014e8185602086016100ee565b61015781610118565b840191505092915050565b6000602082019050818103600083015261017c8184610129565b90509291505056fea2646970667358221220a1b2c3d4e5f6789012345678901234567890123456789012345678901234567890123464736f6c63430008110033",
+    bytecode: "0x608060405234801561001057600080fd5b50610150806100206000396000f3fe608060405234801561001057600080fd5b50600436106100365760003560e01c8063209652551461003b5780633fa4f24514610059575b600080fd5b610043610077565b60405161005091906100a2565b60405180910390f35b61006161007d565b60405161006e91906100a2565b60405180910390f35b60005481565b600160008082825461008a91906100bd565b925050819055565b6000819050919050565b6100a581610092565b82525050565b60006020820190506100c0600083018461009c565b9291505056fea2646970667358221220a1b2c3d4e5f6789012345678901234567890123456789012345678901234567890123464736f6c63430008110033",
   },
 }
 
 type ContractType = keyof typeof contracts
-type DeploymentStatus = "idle" | "deploying" | "success" | "error"
 
 export default function ContractDeployer() {
-  const [address, setAddress] = useState<string>("")
-  const [chainId, setChainId] = useState<number>(0)
-  const [isConnected, setIsConnected] = useState<boolean>(false)
-  const [provider, setProvider] = useState<ethers.BrowserProvider | null>(null)
-
   const [selectedContract, setSelectedContract] = useState<ContractType>("counter")
-  const [deploymentStatus, setDeploymentStatus] = useState<DeploymentStatus>("idle")
-  const [deployedAddress, setDeployedAddress] = useState<string>("")
-  const [statusMessage, setStatusMessage] = useState<string>("Ready to deploy")
   const [isAbiOpen, setIsAbiOpen] = useState(false)
+  const [forceUpdate, setForceUpdate] = useState(0)
 
-  const isCorrectNetwork = chainId === heliosTestnet.chainId
+  // Use the new wallet hook
+  const {
+    address,
+    chainId,
+    isConnected,
+    isCorrectNetwork,
+    provider,
+    signer,
+    error: walletError,
+  } = useWallet(heliosTestnet)
 
-  const connectWallet = async () => {
-    if (typeof window.ethereum !== "undefined") {
-      try {
-        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" })
-        const chainId = await window.ethereum.request({ method: "eth_chainId" })
+  // Use the new deployment hook
+  const {
+    status: deploymentStatus,
+    message: statusMessage,
+    deployedAddress,
+    transactionHash,
+    error: deploymentError,
+    deployContract,
+    resetDeployment,
+  } = useDeployment(provider, signer)
 
-        setAddress(accounts[0])
-        setChainId(Number.parseInt(chainId, 16))
-        setIsConnected(true)
-        setProvider(new ethers.BrowserProvider(window.ethereum))
-        setStatusMessage("Wallet connected successfully!")
-
-        if (Number.parseInt(chainId, 16) !== heliosTestnet.chainId) {
-          setTimeout(() => switchToHeliosNetwork(), 1000)
-        }
-      } catch (error) {
-        console.error("Failed to connect wallet:", error)
-        setStatusMessage("Failed to connect wallet")
-      }
-    } else {
-      setStatusMessage("Please install a Web3 wallet like MetaMask")
-    }
-  }
-
-  const switchToHeliosNetwork = async () => {
-    if (typeof window.ethereum !== "undefined") {
-      try {
-        await window.ethereum.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: `0x${heliosTestnet.chainId.toString(16)}` }],
-        })
-      } catch (switchError: any) {
-        if (switchError.code === 4902) {
-          try {
-            await window.ethereum.request({
-              method: "wallet_addEthereumChain",
-              params: [
-                {
-                  chainId: `0x${heliosTestnet.chainId.toString(16)}`,
-                  chainName: heliosTestnet.name,
-                  nativeCurrency: {
-                    name: heliosTestnet.nativeCurrency.name,
-                    symbol: heliosTestnet.nativeCurrency.symbol,
-                    decimals: heliosTestnet.nativeCurrency.decimals,
-                  },
-                  rpcUrls: [heliosTestnet.rpcUrl],
-                  blockExplorerUrls: [heliosTestnet.explorerUrl],
-                },
-              ],
-            })
-          } catch (addError) {
-            console.error("Failed to add network:", addError)
-            setStatusMessage("Failed to add Helios network")
-          }
-        } else {
-          console.error("Failed to switch network:", switchError)
-          setStatusMessage("Failed to switch to Helios network")
-        }
-      }
-    }
-  }
-
-  const disconnectWallet = () => {
-    setAddress("")
-    setChainId(0)
-    setIsConnected(false)
-    setProvider(null)
-    setStatusMessage("Wallet disconnected")
-  }
-
+  // Force UI update when wallet state changes
   useEffect(() => {
-    if (typeof window.ethereum !== "undefined") {
-      const handleAccountsChanged = (accounts: string[]) => {
-        if (accounts.length === 0) {
-          disconnectWallet()
-        } else {
-          setAddress(accounts[0])
-        }
-      }
-
-      const handleChainChanged = (chainId: string) => {
-        setChainId(Number.parseInt(chainId, 16))
-      }
-
-      window.ethereum.on("accountsChanged", handleAccountsChanged)
-      window.ethereum.on("chainChanged", handleChainChanged)
-
-      return () => {
-        window.ethereum.removeListener("accountsChanged", handleAccountsChanged)
-        window.ethereum.removeListener("chainChanged", handleChainChanged)
-      }
+    if (isConnected && provider && signer) {
+      setForceUpdate(prev => prev + 1)
     }
-  }, [])
+  }, [isConnected, provider, signer])
 
-  const deployContract = async () => {
-    if (!provider || !isConnected || !isCorrectNetwork) return
+  // Debug logging
+  console.log('[App] Wallet State:', {
+    address,
+    chainId,
+    isConnected,
+    isCorrectNetwork,
+    hasProvider: !!provider,
+    hasSigner: !!signer,
+    walletError,
+  })
 
-    try {
-      setDeploymentStatus("deploying")
-      setStatusMessage("Preparing deployment...")
-
-      const signer = await provider.getSigner()
-      const contract = contracts[selectedContract]
-
-      // Get current gas price and add buffer for Helios network
-      setStatusMessage("Estimating gas...")
-      const feeData = await provider.getFeeData()
-
-      const gasPrice = feeData.gasPrice
-        ? (feeData.gasPrice * BigInt(120)) / BigInt(100) // 20% buffer
-        : ethers.parseUnits("20", "gwei") // Fallback to 20 gwei
-
-      console.log("[v0] Using gas price:", ethers.formatUnits(gasPrice, "gwei"), "gwei")
-
-      const factory = new ethers.ContractFactory(contract.abi, contract.bytecode, signer)
-
-      let gasLimit: bigint
-      try {
-        gasLimit = await factory.getDeployTransaction().then((tx) => provider.estimateGas(tx))
-        // Add 20% buffer to gas limit
-        gasLimit = (gasLimit * BigInt(120)) / BigInt(100)
-        console.log("[v0] Using gas limit:", gasLimit.toString())
-      } catch (gasError) {
-        console.log("[v0] Gas estimation failed, using default:", gasError)
-        gasLimit = BigInt(500000) // Fallback gas limit
-      }
-
-      setStatusMessage("Deploying contract...")
-
-      const deployedContract = await factory.deploy({
-        gasPrice,
-        gasLimit,
-      })
-
-      console.log("[v0] Contract deployed, waiting for confirmation...")
-      setStatusMessage("Waiting for confirmation...")
-
-      const deploymentPromise = deployedContract.waitForDeployment()
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Deployment timeout after 2 minutes")), 120000),
-      )
-
-      await Promise.race([deploymentPromise, timeoutPromise])
-
-      const contractAddress = await deployedContract.getAddress()
-      console.log("[v0] Contract deployed at:", contractAddress)
-
-      setDeployedAddress(contractAddress)
-      setDeploymentStatus("success")
-      setStatusMessage("Contract deployed successfully!")
-    } catch (error: any) {
-      console.error("[v0] Deployment failed:", error)
-      setDeploymentStatus("error")
-
-      let errorMessage = "Deployment failed. Please try again."
-
-      if (error.message?.includes("timeout")) {
-        errorMessage = "Deployment timed out. The transaction may still be processing."
-      } else if (error.message?.includes("insufficient funds")) {
-        errorMessage = "Insufficient funds for gas fees."
-      } else if (error.message?.includes("gas")) {
-        errorMessage = "Gas estimation failed. Try increasing gas limit."
-      } else if (error.message?.includes("nonce")) {
-        errorMessage = "Nonce error. Please reset your wallet and try again."
-      } else if (error.code === 4001) {
-        errorMessage = "Transaction rejected by user."
-      } else if (error.message?.includes("parse")) {
-        errorMessage = "Transaction parsing error. Please check network connection."
-      }
-
-      setStatusMessage(errorMessage)
+  const handleDeploy = async () => {
+    if (!isConnected || !isCorrectNetwork) {
+      console.log('[App] Deploy blocked:', { isConnected, isCorrectNetwork })
+      return
     }
+    
+    console.log('[App] Starting deployment...')
+    const contract = contracts[selectedContract]
+    await deployContract(contract)
   }
 
   const getStatusColor = () => {
@@ -294,33 +172,7 @@ export default function ContractDeployer() {
           </div>
 
           <div className="flex items-center gap-4">
-            {isConnected && (
-              <>
-                <Badge variant={isCorrectNetwork ? "default" : "destructive"}>
-                  {isCorrectNetwork ? "Helios Testnet" : "Wrong Network"}
-                </Badge>
-                {!isCorrectNetwork && (
-                  <Button variant="outline" size="sm" onClick={switchToHeliosNetwork}>
-                    Switch Network
-                  </Button>
-                )}
-              </>
-            )}
-            {isConnected ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">
-                  {address.slice(0, 6)}...{address.slice(-4)}
-                </span>
-                <Button variant="outline" size="sm" onClick={disconnectWallet}>
-                  Disconnect
-                </Button>
-              </div>
-            ) : (
-              <Button className="bg-[#002dcb] hover:bg-[#002dcb]/90" onClick={connectWallet}>
-                <Wallet className="w-4 h-4 mr-2" />
-                Connect Wallet
-              </Button>
-            )}
+            <WalletConnector networkConfig={heliosTestnet} />
           </div>
         </div>
       </header>
@@ -338,14 +190,37 @@ export default function ContractDeployer() {
             </AlertDescription>
           </Alert>
 
+          {/* Wallet Error Display */}
+          {walletError && (
+            <Alert className="border-destructive/20 bg-destructive/10">
+              <AlertDescription className="text-destructive">
+                {walletError}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Deployment Error Display */}
+          {deploymentError && (
+            <Alert className="border-destructive/20 bg-destructive/10">
+              <AlertDescription className="text-destructive">
+                <div className="space-y-2">
+                  <p>{statusMessage}</p>
+                  <details className="text-xs">
+                    <summary className="cursor-pointer hover:underline">Technical Details</summary>
+                    <code className="block mt-2 p-2 bg-destructive/20 rounded text-xs break-all">
+                      {deploymentError}
+                    </code>
+                  </details>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Wrong Network Warning */}
           {isConnected && !isCorrectNetwork && (
             <Alert className="border-destructive/20 bg-destructive/10">
-              <AlertDescription className="text-destructive flex items-center justify-between">
-                <span>Please switch to Helios Testnet (Chain ID: {heliosTestnet.chainId}) to deploy contracts.</span>
-                <Button variant="outline" size="sm" onClick={switchToHeliosNetwork}>
-                  Switch Now
-                </Button>
+              <AlertDescription className="text-destructive">
+                Please switch to Helios Testnet (Chain ID: {heliosTestnet.chainId}) to deploy contracts.
               </AlertDescription>
             </Alert>
           )}
@@ -367,8 +242,9 @@ export default function ContractDeployer() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="counter">Counter Contract</SelectItem>
-                    <SelectItem value="ping">Ping Contract</SelectItem>
+                    <SelectItem value="counter">Simple Counter</SelectItem>
+                    <SelectItem value="hello">Hello World</SelectItem>
+                    <SelectItem value="storage">Simple Storage</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -377,8 +253,10 @@ export default function ContractDeployer() {
                 <h4 className="font-medium text-foreground mb-2">{contracts[selectedContract].name}</h4>
                 <p className="text-sm text-muted-foreground">
                   {selectedContract === "counter"
-                    ? "A simple counter contract with increment and decrement functions."
-                    : 'A basic ping-pong contract that returns "ping" and "pong" messages.'}
+                    ? "A simple counter contract with increment function."
+                    : selectedContract === "hello"
+                    ? "A basic Hello World contract that returns 'Hello World'."
+                    : "A simple storage contract with getValue and setValue functions."}
                 </p>
               </div>
             </CardContent>
@@ -395,7 +273,7 @@ export default function ContractDeployer() {
             </CardHeader>
             <CardContent>
               <Button
-                onClick={deployContract}
+                onClick={handleDeploy}
                 disabled={!isConnected || !isCorrectNetwork || deploymentStatus === "deploying"}
                 className="w-full bg-[#002dcb] hover:bg-[#002dcb]/90 text-white"
                 size="lg"
@@ -430,6 +308,26 @@ export default function ContractDeployer() {
                   </div>
                 </div>
 
+                {transactionHash && (
+                  <div>
+                    <label className="text-sm font-medium text-foreground">Transaction Hash</label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <code className="flex-1 p-2 bg-muted rounded text-sm font-mono">{transactionHash}</code>
+                      <Button variant="outline" size="sm" asChild>
+                        <a
+                          href={`${heliosTestnet.explorerUrl}/tx/${transactionHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          View
+                        </a>
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {/* ABI Viewer */}
                 <Collapsible open={isAbiOpen} onOpenChange={setIsAbiOpen}>
                   <CollapsibleTrigger asChild>
@@ -444,6 +342,15 @@ export default function ContractDeployer() {
                     </pre>
                   </CollapsibleContent>
                 </Collapsible>
+
+                {/* Reset Button */}
+                <Button 
+                  variant="outline" 
+                  onClick={resetDeployment}
+                  className="w-full"
+                >
+                  Deploy Another Contract
+                </Button>
               </CardContent>
             </Card>
           )}
