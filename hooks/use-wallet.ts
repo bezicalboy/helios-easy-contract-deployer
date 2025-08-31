@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { ethers } from 'ethers'
 
 export interface WalletState {
@@ -41,17 +41,41 @@ export function useWallet(networkConfig: NetworkConfig) {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       // Check for different wallet providers
-      const providers = [
-        (window as any).ethereum,
-        (window as any).rabby?.ethereum,
-        (window as any).okxwallet,
-        (window as any).bitkeep,
-        (window as any).tokenpocket,
-        (window as any).imToken,
-      ].filter(Boolean)
+      const availableWallets = []
+      
+      if ((window as any).ethereum) {
+        availableWallets.push({ name: 'MetaMask', provider: (window as any).ethereum })
+      }
+      
+      if ((window as any).rabby?.ethereum) {
+        availableWallets.push({ name: 'Rabby', provider: (window as any).rabby.ethereum })
+      }
+      
+      if ((window as any).okxwallet) {
+        availableWallets.push({ name: 'OKX Wallet', provider: (window as any).okxwallet })
+      }
+      
+      if ((window as any).bitkeep) {
+        availableWallets.push({ name: 'BitKeep', provider: (window as any).bitkeep })
+      }
+      
+      if ((window as any).tokenpocket) {
+        availableWallets.push({ name: 'TokenPocket', provider: (window as any).tokenpocket })
+      }
+      
+      if ((window as any).imToken) {
+        availableWallets.push({ name: 'imToken', provider: (window as any).imToken })
+      }
 
-      if (providers.length > 0) {
-        setEthereum(providers[0])
+      if (availableWallets.length > 0) {
+        // Use the first available wallet
+        const selectedWallet = availableWallets[0]
+        setEthereum(selectedWallet.provider)
+      } else {
+        setState(prev => ({ 
+          ...prev, 
+          error: 'No Web3 wallet detected. Please install MetaMask, Rabby, or another Web3 wallet.' 
+        }))
       }
     }
   }, [])
@@ -74,6 +98,9 @@ export function useWallet(networkConfig: NetworkConfig) {
         ...prev,
         chainId: numericChainId,
       }))
+      
+      // Force re-render
+      // forceUpdate({}) // REMOVED: Not helping with state sync
       
     } catch (switchError: any) {
       // If network doesn't exist, add it
@@ -100,6 +127,9 @@ export function useWallet(networkConfig: NetworkConfig) {
             ...prev,
             chainId: numericChainId,
           }))
+          
+          // Force re-render
+          // forceUpdate({}) // REMOVED: Not helping with state sync
           
         } catch (addError) {
           console.error('Failed to add network:', addError)
@@ -142,7 +172,10 @@ export function useWallet(networkConfig: NetworkConfig) {
       const provider = new ethers.BrowserProvider(ethereum)
       const signer = await provider.getSigner()
 
-      // Update state in one go to ensure consistency
+      // SIMPLE SOLUTION: Just increment counter to force re-render
+      // setRenderCounter(prev => prev + 1) // REMOVED: Not helping with state sync
+      
+      // Update state IMMEDIATELY with provider and signer - ONLY ONCE
       setState({
         address: accounts[0],
         chainId: numericChainId,
@@ -157,6 +190,16 @@ export function useWallet(networkConfig: NetworkConfig) {
       if (numericChainId !== networkConfig.chainId) {
         setTimeout(() => switchNetwork(), 1000)
       }
+
+      // Request a signature AFTER state is updated (optional, for verification)
+      setTimeout(async () => {
+        try {
+          const message = `Connect to Helios Contract Deployer\n\nTimestamp: ${Date.now()}\n\nThis signature is used to verify wallet connection.`
+          await signer.signMessage(message)
+        } catch (sigError) {
+          // Signature failure is okay - wallet is still connected
+        }
+      }, 100)
 
     } catch (error: any) {
       console.error('Wallet connection failed:', error)
@@ -191,6 +234,8 @@ export function useWallet(networkConfig: NetworkConfig) {
       isConnecting: false,
       error: null,
     })
+    
+    // forceUpdate({}) // REMOVED: Not helping with state sync
   }, [])
 
   // Listen for wallet events
@@ -202,12 +247,14 @@ export function useWallet(networkConfig: NetworkConfig) {
         disconnectWallet()
       } else {
         setState(prev => ({ ...prev, address: accounts[0] }))
+        // forceUpdate({}) // REMOVED: Not helping with state sync
       }
     }
 
     const handleChainChanged = (chainId: string) => {
       const numericChainId = parseInt(chainId, 16)
       setState(prev => ({ ...prev, chainId: numericChainId }))
+      // forceUpdate({}) // REMOVED: Not helping with state sync
     }
 
     const handleDisconnect = () => {
@@ -241,16 +288,17 @@ export function useWallet(networkConfig: NetworkConfig) {
           const provider = new ethers.BrowserProvider(ethereum)
           const signer = await provider.getSigner()
 
-          setState(prev => ({
-            ...prev,
+          setState({
             address: accounts[0],
             chainId: numericChainId,
             isConnected: true,
             provider,
             signer,
-          }))
+            isConnecting: false,
+            error: null,
+          })
           
-          console.log('[Wallet] Auto-connected to existing account:', accounts[0], 'Chain ID:', numericChainId)
+          // console.log('[Wallet] Auto-connected to existing account:', accounts[0], 'Chain ID:', numericChainId) // REMOVED
         }
       } catch (error) {
         console.error('Failed to check existing connection:', error)
@@ -260,19 +308,6 @@ export function useWallet(networkConfig: NetworkConfig) {
     checkConnection()
   }, [ethereum])
 
-  // Debug: Monitor state changes
-  useEffect(() => {
-    console.log('[Wallet] State changed:', {
-      address: state.address,
-      chainId: state.chainId,
-      isConnected: state.isConnected,
-      isCorrectNetwork: state.chainId === networkConfig.chainId,
-      hasProvider: !!state.provider,
-      hasSigner: !!state.signer,
-      error: state.error,
-    })
-  }, [state, networkConfig.chainId])
-
   const isCorrectNetwork = state.chainId === networkConfig.chainId
 
   return {
@@ -281,5 +316,6 @@ export function useWallet(networkConfig: NetworkConfig) {
     connectWallet,
     disconnectWallet,
     switchNetwork,
+    // renderCounter, // REMOVED: Not helping with state sync
   }
 }

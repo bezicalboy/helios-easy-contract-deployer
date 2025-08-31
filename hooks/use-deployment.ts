@@ -46,46 +46,9 @@ export function useDeployment(provider: ethers.BrowserProvider | null, signer: e
       // Create contract factory first
       const factory = new ethers.ContractFactory(contract.abi, contract.bytecode, signer)
 
-      // Check if it's OKX wallet and handle differently
-      const isOKXWallet = (window as any).okxwallet !== undefined
-      
-      if (isOKXWallet) {
-        setState(prev => ({ ...prev, message: 'OKX Wallet detected - using manual gas settings...' }))
-        
-        // For OKX wallet, use manual gas settings to avoid estimation issues
-        const gasPrice = ethers.parseUnits("1", "gwei") // Use 1 gwei as default
-        const gasLimit = BigInt(200000) // Conservative gas limit
-        
-        console.log("[Deployment] OKX Wallet - Using manual gas settings:", {
-          gasPrice: ethers.formatUnits(gasPrice, "gwei") + " gwei",
-          gasLimit: gasLimit.toString()
-        })
-        
-        const deployedContract = await factory.deploy({
-          gasPrice,
-          gasLimit,
-        })
-        
-        setState(prev => ({ ...prev, message: 'Waiting for confirmation...' }))
-        
-        await deployedContract.waitForDeployment()
-        const contractAddress = await deployedContract.getAddress()
-        
-        setState({
-          status: 'success',
-          message: 'Contract deployed successfully!',
-          deployedAddress: contractAddress,
-          transactionHash: 'OKX deployment completed',
-          error: null,
-        })
-        
-        return
-      }
-
-      // For other wallets, let them handle gas estimation automatically
+      // Deploy without specifying gas - let wallet handle it
       setState(prev => ({ ...prev, message: 'Deploying contract...' }))
 
-      // Deploy without specifying gas - let wallet handle it
       const deployedContract = await factory.deploy()
 
       console.log("[Deployment] Contract deployed, waiting for confirmation...")
@@ -102,6 +65,7 @@ export function useDeployment(provider: ethers.BrowserProvider | null, signer: e
       // Get contract address
       const contractAddress = await deployedContract.getAddress()
       console.log("[Deployment] Contract deployed at:", contractAddress)
+      console.log("[Deployment] Contract ABI:", contract.abi)
 
       setState({
         status: 'success',

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +10,9 @@ interface WalletConnectorProps {
 }
 
 export function WalletConnector({ networkConfig }: WalletConnectorProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [availableWallets, setAvailableWallets] = useState<Array<{ name: string; provider: any }>>([])
+
   const {
     address,
     chainId,
@@ -22,7 +25,38 @@ export function WalletConnector({ networkConfig }: WalletConnectorProps) {
     switchNetwork,
   } = useWallet(networkConfig)
 
-  const [isOpen, setIsOpen] = useState(false)
+  // Check for available wallets when component mounts
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const wallets = []
+      
+      if ((window as any).ethereum) {
+        wallets.push({ name: 'MetaMask', provider: (window as any).ethereum })
+      }
+      
+      if ((window as any).rabby?.ethereum) {
+        wallets.push({ name: 'Rabby', provider: (window as any).rabby.ethereum })
+      }
+      
+      if ((window as any).okxwallet) {
+        wallets.push({ name: 'OKX Wallet', provider: (window as any).okxwallet })
+      }
+      
+      if ((window as any).bitkeep) {
+        wallets.push({ name: 'BitKeep', provider: (window as any).bitkeep })
+      }
+      
+      if ((window as any).tokenpocket) {
+        wallets.push({ name: 'TokenPocket', provider: (window as any).tokenpocket })
+      }
+      
+      if ((window as any).imToken) {
+        wallets.push({ name: 'imToken', provider: (window as any).imToken })
+      }
+
+      setAvailableWallets(wallets)
+    }
+  }, [])
 
   const handleConnect = async () => {
     await connectWallet()
@@ -94,67 +128,46 @@ export function WalletConnector({ networkConfig }: WalletConnectorProps) {
             </div>
           )}
           
-          {/* Wallet Options */}
-          <div className="space-y-3">
-            <Button
-              onClick={handleConnect}
-              disabled={isConnecting}
-              className="w-full justify-start h-12"
-              variant="outline"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">M</span>
-                </div>
-                <span>MetaMask</span>
-              </div>
-              {isConnecting && (
-                <div className="ml-auto animate-spin rounded-full h-4 w-4 border-2 border-current border-t-transparent" />
-              )}
-            </Button>
-            
-            <Button
-              onClick={handleConnect}
-              disabled={isConnecting}
-              className="w-full justify-start h-12"
-              variant="outline"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">R</span>
-                </div>
-                <span>Rabby Wallet</span>
-              </div>
-            </Button>
-            
-            <Button
-              onClick={handleConnect}
-              disabled={isConnecting}
-              className="w-full justify-start h-12"
-              variant="outline"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">O</span>
-                </div>
-                <span>OKX Wallet</span>
-              </div>
-            </Button>
-            
-            <Button
-              onClick={handleConnect}
-              disabled={isConnecting}
-              className="w-full justify-start h-12"
-              variant="outline"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">B</span>
-                </div>
-                <span>BitKeep</span>
-              </div>
-            </Button>
-          </div>
+          {/* Available Wallets */}
+          {availableWallets.length > 0 ? (
+            <div className="space-y-3">
+              {availableWallets.map((wallet, index) => (
+                <Button
+                  key={index}
+                  onClick={handleConnect}
+                  disabled={isConnecting}
+                  className="w-full justify-start h-12"
+                  variant="outline"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                      wallet.name === 'MetaMask' ? 'bg-orange-500' :
+                      wallet.name === 'Rabby' ? 'bg-blue-500' :
+                      wallet.name === 'OKX Wallet' ? 'bg-purple-500' :
+                      wallet.name === 'BitKeep' ? 'bg-green-500' :
+                      wallet.name === 'TokenPocket' ? 'bg-red-500' :
+                      'bg-gray-500'
+                    }`}>
+                      <span className="text-white text-xs font-bold">
+                        {wallet.name.charAt(0)}
+                      </span>
+                    </div>
+                    <span>{wallet.name}</span>
+                  </div>
+                  {isConnecting && (
+                    <div className="ml-auto animate-spin rounded-full h-4 w-4 border-2 border-current border-t-transparent" />
+                  )}
+                </Button>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-sm text-muted-foreground mb-2">No Web3 wallets detected</p>
+              <p className="text-xs text-muted-foreground">
+                Please install a supported wallet extension first
+              </p>
+            </div>
+          )}
           
           {/* Help Text */}
           <div className="text-xs text-muted-foreground text-center">

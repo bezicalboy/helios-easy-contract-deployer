@@ -1,16 +1,16 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ExternalLink, ChevronDown, Code, Wallet } from "lucide-react"
-import Image from "next/image"
+import { Badge } from "@/components/ui/badge"
+import { ExternalLink, CheckCircle, AlertCircle, XCircle, ChevronDown } from "lucide-react"
 import { WalletConnector } from "@/components/wallet-connector"
 import { useWallet, NetworkConfig } from "@/hooks/use-wallet"
 import { useDeployment } from "@/hooks/use-deployment"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
 // Helios Testnet configuration
 const heliosTestnet: NetworkConfig = {
@@ -95,9 +95,9 @@ type ContractType = keyof typeof contracts
 export default function ContractDeployer() {
   const [selectedContract, setSelectedContract] = useState<ContractType>("counter")
   const [isAbiOpen, setIsAbiOpen] = useState(false)
-  const [forceUpdate, setForceUpdate] = useState(0)
 
   // Use the new wallet hook
+  const walletState = useWallet(heliosTestnet)
   const {
     address,
     chainId,
@@ -106,7 +106,7 @@ export default function ContractDeployer() {
     provider,
     signer,
     error: walletError,
-  } = useWallet(heliosTestnet)
+  } = walletState
 
   // Use the new deployment hook
   const {
@@ -119,33 +119,18 @@ export default function ContractDeployer() {
     resetDeployment,
   } = useDeployment(provider, signer)
 
-  // Force UI update when wallet state changes
-  useEffect(() => {
-    if (isConnected && provider && signer) {
-      setForceUpdate(prev => prev + 1)
-    }
-  }, [isConnected, provider, signer])
-
-  // Debug logging
-  console.log('[App] Wallet State:', {
-    address,
-    chainId,
-    isConnected,
-    isCorrectNetwork,
-    hasProvider: !!provider,
-    hasSigner: !!signer,
-    walletError,
-  })
-
   const handleDeploy = async () => {
     if (!isConnected || !isCorrectNetwork) {
-      console.log('[App] Deploy blocked:', { isConnected, isCorrectNetwork })
       return
     }
     
-    console.log('[App] Starting deployment...')
     const contract = contracts[selectedContract]
     await deployContract(contract)
+  }
+
+  // Force re-render when contract type changes (this seems to work)
+  const handleContractChange = (value: ContractType) => {
+    setSelectedContract(value)
   }
 
   const getStatusColor = () => {
@@ -167,7 +152,7 @@ export default function ContractDeployer() {
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Image src="/helios-logo.png" alt="Helios Logo" width={32} height={32} className="w-8 h-8" />
+            <img src="/helios-logo.png" alt="Helios Logo" className="w-8 h-8" />
             <h1 className="text-xl font-bold text-foreground">Helios Contract Deployer</h1>
           </div>
 
@@ -229,15 +214,14 @@ export default function ContractDeployer() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Code className="h-5 w-5" />
-                Contract Selection
+                <h2 className="text-lg font-semibold text-foreground">Contract Selection</h2>
               </CardTitle>
-              <CardDescription>Choose a pre-defined contract to deploy to Helios Testnet</CardDescription>
+              <p className="text-sm text-muted-foreground">Choose a pre-defined contract to deploy to Helios Testnet</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Contract Type</label>
-                <Select value={selectedContract} onValueChange={(value: ContractType) => setSelectedContract(value)}>
+                <Select value={selectedContract} onValueChange={handleContractChange}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -266,12 +250,11 @@ export default function ContractDeployer() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Wallet className="h-5 w-5" />
-                Deploy Contract
+                <h2 className="text-lg font-semibold text-foreground">Deploy Contract</h2>
               </CardTitle>
-              <CardDescription>Deploy your selected contract to the Helios Testnet</CardDescription>
+              <p className="text-sm text-muted-foreground">Deploy your selected contract to the Helios Testnet</p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <Button
                 onClick={handleDeploy}
                 disabled={!isConnected || !isCorrectNetwork || deploymentStatus === "deploying"}
@@ -280,6 +263,21 @@ export default function ContractDeployer() {
               >
                 {deploymentStatus === "deploying" ? "Deploying..." : "Deploy Contract"}
               </Button>
+              
+              {/* Manual refresh button if deploy button isn't working */}
+              {/* Removed manual refresh button */}
+
+              {/* Test button to show current wallet state */}
+              {/* Removed test wallet state button */}
+
+              {/* Direct wallet hook test */}
+              {/* Removed direct wallet state button */}
+
+              {/* Test wallet hook internal state */}
+              {/* Removed force re-render test button */}
+
+              {/* Debug Info */}
+              {/* Removed debug info display */}
             </CardContent>
           </Card>
 
@@ -327,6 +325,9 @@ export default function ContractDeployer() {
                     </div>
                   </div>
                 )}
+
+                {/* ABI Viewer */}
+                {/* Removed ABI Viewer */}
 
                 {/* ABI Viewer */}
                 <Collapsible open={isAbiOpen} onOpenChange={setIsAbiOpen}>
